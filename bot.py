@@ -1,41 +1,101 @@
+import os
+import re
 import requests
-import random
-import string
-import time
-import json
 import asyncio
 import threading
 import urllib3
 import telebot
 from flask import Flask, request, jsonify, render_template_string
 
-# SSL Warning বন্ধ রাখা হলো
+# SSL Warning বন্ধ রাখার জন্য
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
 # ==================== 1. TELEGRAM BOT SETUP ====================
-TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
+BOT_TOKEN = "8674313991:AAHBAQdMTUKbEGfOL6NYGk5Ne7YbzEOzgnc"
+bot = telebot.TeleBot(BOT_TOKEN)
 
-bot = None
-if TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_TOKEN != "YOUR_TELEGRAM_BOT_TOKEN_HERE":
-    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+API_URL = "https://darktoolshub.site/bot/trueapi.php" 
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36'
+}
 
-    @bot.message_handler(commands=['start'])
-    def send_welcome(message):
-        bot.reply_to(message, "⚡ Cyber API Control Panel & Bot is active!")
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(
+        message, 
+        "👋 **Welcome!**\nযেকোনো নাম্বার দাও, আমি সেটার ডিটেইলস এবং WhatsApp/Telegram লিংক বের করে দিচ্ছি।", 
+        parse_mode="Markdown"
+    )
 
-    def run_telegram_bot():
+@bot.message_handler(func=lambda message: True)
+def handle_number_lookup(message):
+    raw_input = message.text.strip()
+    clean_number = re.sub(r'[^\d]', '', raw_input)
+    
+    if not clean_number:
+        bot.reply_to(message, "❌ একটি সঠিক নাম্বার দাও।")
+        return
+
+    if clean_number.startswith("01") and len(clean_number) == 11:
+        link_number = "88" + clean_number
+    else:
+        link_number = clean_number
+
+    loading_msg = bot.reply_to(message, "🔍 ডাটা খোঁজা হচ্ছে...")
+    wa_link = f"https://wa.me/{link_number}"
+    tg_link = f"https://t.me/+{link_number}"
+
+    try:
+        api_params = {"num": f"+{link_number}"}
+        response = requests.get(API_URL, params=api_params, headers=HEADERS, timeout=10)
+        
         try:
-            # 409 Conflict Error এড়ানোর জন্য পুরোনো ওয়েবহুক রিমুভ করা হচ্ছে
-            bot.remove_webhook()
-            print("Telegram Bot started successfully...")
-            bot.infinity_polling(none_stop=True)
-        except Exception as e:
-            print("Telegram Bot Error:", e)
+            data = response.json()
+        except ValueError:
+            bot.edit_message_text(chat_id=message.chat.id, message_id=loading_msg.message_id, text="❌ API থেকে ডাটা আনা যাচ্ছে না।")
+            return
+
+        if data.get("success"):
+            name = data.get("name", "Unknown")
+            carrier = data.get("carrier", "Unknown")
+            country = data.get("country", "Unknown")
+            
+            reply_text = (
+                f"👤 **Name:** {name}\n"
+                f"📱 **Number:** +{link_number}\n"
+                f"🏢 **Carrier:** {carrier}\n"
+                f"🌍 **Country:** {country}\n\n"
+                f"🔗 **Direct Links:**\n"
+                f"🟢 [Open in WhatsApp]({wa_link})\n"
+                f"✈️ [Open in Telegram]({tg_link})"
+            )
+        else:
+            reply_text = (
+                f"❌ **এই নাম্বারের ডিটেইলস API-তে পাওয়া যায়নি।**\n\n"
+                f"🔗 **Direct Links:**\n"
+                f"🟢 [Open in WhatsApp]({wa_link})\n"
+                f"✈️ [Open in Telegram]({tg_link})"
+            )
+
+        bot.edit_message_text(chat_id=message.chat.id, message_id=loading_msg.message_id, text=reply_text, parse_mode="Markdown", disable_web_page_preview=True)
+            
+    except Exception as e:
+        bot.edit_message_text(chat_id=message.chat.id, message_id=loading_msg.message_id, text="⚠️ সার্ভারে কানেক্ট করতে সমস্যা হয়েছে।")
 
 
-# ==================== 2. FUTURISTIC DARK UI ====================
+def run_telegram_bot():
+    try:
+        # 409 Conflict Error সমাধান করার জন্য
+        bot.remove_webhook()
+        print("Telegram Bot started successfully with long polling...")
+        bot.infinity_polling(none_stop=True)
+    except Exception as e:
+        print("Telegram Bot Error:", e)
+
+
+# ==================== 2. FUTURISTIC DARK WEB UI ====================
 UI_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -165,26 +225,24 @@ UI_TEMPLATE = """
 
 
 # ==================== 3. 75 APIs DEFINITION ====================
-# তোমার কাছে থাকা call_api50 থেকে call_api75 পর্যন্ত ফাংশনগুলো এখানে বসাবে:
+# তোমার কাছে থাকা ৭৫টি API ফাংশন (call_api50 থেকে call_api75) ঠিক এই জায়গায় বসাবে:
 def call_api50(phone: str):
     url = "https://api.redx.com.bd:443/v1/user/signup"
     data = {"name": phone, "service": "redx", "phoneNumber": phone}
     resp = requests.post(url, json=data, headers={"Content-Type": "application/json"}, verify=False)
     resp.raise_for_status()
 
-# ... বাকি call_api51 থেকে call_api75 ফাংশনগুলো এখানে পর পর লিখে যাবে ...
+# ... বাকি call_api51 থেকে call_api75 এখানে পর পর লিখে যাবে ...
 
-
-# APIS Dictionary (এখানে তোমার সব API নম্বর অনুযায়ী জোড়া দেবে)
+# APIS Dictionary
 apis = {
     50: call_api50,
     # 51: call_api51,
-    # 52: call_api52,
     # ... 75 পর্যন্ত যুক্ত করবে ...
 }
 
 
-# ==================== 4. BACKEND EXECUTOR ====================
+# ==================== 4. BACKEND API EXECUTOR ====================
 async def _run_apis_concurrently(phone: str, api_numbers: list[int]) -> list[dict]:
     loop = asyncio.get_running_loop()
     results: list[dict] = []
@@ -211,7 +269,6 @@ async def _run_apis_concurrently(phone: str, api_numbers: list[int]) -> list[dic
 def index():
     return render_template_string(UI_TEMPLATE)
 
-
 @app.route("/run-all", methods=["GET", "POST"])
 def http_run_all():
     if request.method == "GET":
@@ -225,7 +282,6 @@ def http_run_all():
     api_numbers = sorted(apis.keys())
     results = asyncio.run(_run_apis_concurrently(phone, api_numbers))
     return jsonify({"count": len(results), "results": results})
-
 
 @app.route("/run", methods=["GET", "POST"])
 def http_run_selected():
@@ -253,11 +309,13 @@ def http_run_selected():
     return jsonify({"count": len(results), "results": results})
 
 
+# ==================== SERVER & BOT START ====================
 if __name__ == "__main__":
-    # টেলিগ্রাম বটকে ব্যাকগ্রাউন্ড থ্রেডে চালানো হচ্ছে
-    if bot:
-        bot_thread = threading.Thread(target=run_telegram_bot, daemon=True)
-        bot_thread.start()
+    # টেলিগ্রাম বট ব্যাকগ্রাউন্ড থ্রেডে স্টার্ট করা হচ্ছে
+    bot_thread = threading.Thread(target=run_telegram_bot, daemon=True)
+    bot_thread.start()
 
-    # ফ্লাস্ক অ্যাপ চালু করা
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    # পোর্ট কনফিগারেশন (Render-এর PORT এনভায়রনমেন্ট ভ্যারিয়েবল সাপোর্ট করবে)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
+    
